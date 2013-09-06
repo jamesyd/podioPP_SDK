@@ -1,0 +1,34 @@
+{
+    "integrationUser": {
+        "systemAdmin": false
+    },
+
+    "tiles": [
+    {
+        "sampleData": {
+            "title": "My contacts",
+            "contents": [
+                {
+                    "name": "--",
+                    "value": "--"
+                }
+            ]
+        },
+        "displayName": "Podio",
+        "name": "PodioMyContacts",
+        "description": "My Contacts for ey4il9gbizsd0l3vbes4d7f2l4nuh3c7",
+        "style": "TABLE",
+        "icons": {
+            "16": "http://placehold.it/16x16",
+            "48": "http://placehold.it/48x48",
+            "128": "http://placehold.it/128x128"
+        },
+        "id": "77ebdcd3-6294-4f52-9420-eee8b252adbc",
+        "published": "2013-02-28T15:12:16.768-0800",
+        "updated": "2013-02-28T15:12:16.768-0800",
+        "config": "http://10.45.130.30:8090/PodioMyContacts/configure",
+        "register": "http://10.45.130.30:8090/registration",
+        "client_id": "ey4il9gbizsd0l3vbes4d7f2l4nuh3c7"
+    }
+]
+}
