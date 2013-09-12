@@ -18,26 +18,25 @@
 <html lang="en">
 <head>
     <link rel="stylesheet" type="text/css" href="{{{host}}}/stylesheets/bootstrap.min.css"> <meta http-equiv="Content-Type" value="text/html; charset=utf-8" />
-    <title>Podio Tile Action</title>
+    <title>Podio Calendar Tile Action</title>
 </head>
 
 <body>
 
 <div class="container-fluid" id="whole">
-    <div class="container-fluid" id="taskInfo">
+    <div class="container-fluid" id="eventInfo">
 
-        <h4><span id=taskName>Placeholder for Task Name</span></h4>
+        <h4><span id=eventName>Placeholder for Calendar Event Name</span></h4>
 
         <span id="description">description place holder</span>  <br>
 
-        <span>Due On: </span><span id="dueOn">Due on place holder</span>  <br> <br>
+        <span>Start On: </span><span id="startOn">Start on place holder</span>  <br> <br>
 
+
+        <p>
+        <button class="btn btn-primary" id="podioview">View In Podio</button>
+        </p>
     </div>
-
-    <p>
-    <button class="btn btn-primary" id="podioview">View In Podio</button>
-    </p>
-
 
     <hr>
     <div class="container-fluid">
@@ -66,7 +65,7 @@
 
 <script src="{{{host}}}/javascripts/jquery-1.10.2.js"></script>
 <script src="{{{host}}}/javascripts/bootstrap.min.js"></script>
-<script src="{{{host}}}/PodioTaskList/javascripts/action.js"></script>
+<script src="{{{host}}}/PodioCalendar/javascripts/action.js"></script>
 <script>
     jive.tile.onOpen(function(config, options) {
         var host = "{{{host}}}";

@@ -1,7 +1,10 @@
 var util = require('util');
 var jive = require('jive-sdk');
 
-var myOauth = Object.create(jive.service.routes.oauth);
+var sdkInstance = require('jive-sdk/jive-sdk-service/routes/oauth');
+
+var myOauth = Object.create(sdkInstance);
+
 module.exports = myOauth;
 
 var tokenStore = jive.service.persistence();
@@ -29,7 +32,7 @@ myOauth.getTokenStore = function() {
     return tokenStore;
 };
 
-var oauthUtil = jive.util.oauth;
+var oauthUtil = require("jive-sdk/jive-sdk-api/lib/util/oauthUtil");
 
 myOauth.refreshToken = function( refreshToken, viewerID ) {
     oauthUtil.refreshTokenFlow( jive.service.options['oauth2'], refreshToken).then( function (response) {
