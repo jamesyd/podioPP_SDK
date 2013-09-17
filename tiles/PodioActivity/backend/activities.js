@@ -5,15 +5,17 @@ var sampleOauth = require('./routes/oauth/sampleOauth');
 var q = require('q');
 var querier = require('./query');
 
-var metadataCollection = "basecampActivityMetadata";
+var metadataCollection = "podioActivityMetadata";
 var metadataStore = jive.service.persistence();
 
 exports.getLastTimePulled = getLastTimePulled;
 exports.getMetadataByInstance = getMetadataByInstance;
 exports.pullActivity = pullActivity;
 exports.pullComments = pullComments;
+exports.pullProjectInfo = pullProjectInfo;
 exports.updateLastTimePulled = updateLastTimePulled;
 exports.recordSyncFromJive = recordSyncFromJive;
+
 
 function extractActivity( parent, rawActivityEntry ) {
     var data = rawActivityEntry['data'];
@@ -24,18 +26,30 @@ function extractActivity( parent, rawActivityEntry ) {
         'email' : ''
     };
 
-
+    if (data['description'] != undefined)
+    {
+        description += " : "  ;
+        description += data['description'] ;
+    }
     var parentTitle = parent['title'] || parent['name'] || parent['text'];
     var parentType = parent['type'];
     var type = rawActivityEntry['type'];
 
-    var title = ( type.charAt(0).toUpperCase() + type.slice(1) ) + ' by ' + actor['name'];
+    if (type != 'task' && type != 'comment')
+        data.value = "";
+
+    var title = ( type.charAt(0).toUpperCase() + type.slice(1) ) +" '" + (data.text || data.value) + "' by " + actor['name'];
     if ( parent != rawActivityEntry ) {
         title += " @ " + parentTitle;
+
     }
 
+    var trgUrl = rawActivityEntry['data']['link']  ;
+    if (trgUrl == undefined || trgUrl == "")
+        trgUrl = parent['link'];
+
     var object = {
-        'url' : rawActivityEntry['link'] || parent['link'],
+        'url' : trgUrl,
         'description' : description,
         'title' : title
     };
@@ -76,11 +90,56 @@ function extractActivity( parent, rawActivityEntry ) {
 
     return activity;
 }
+function extractComment( parent, rawCommentEntry ) {
+
+    var description = rawCommentEntry['rich_value'] || rawCommentEntry['value'];
+    var actor = {
+        'name' : rawCommentEntry['user']['name'],
+        'email' : ''
+    };
+
+    var parentType = 'task'; // we're only processing comments on tasks in here ...
+
+    var title = "title placeholder";
+    if ( parent != rawCommentEntry ) {
+        //title += " @ " + parentTitle;
+    }
+
+    var object = {
+        'url' : '',
+        'description' : description,
+        'title' : title
+    };
+
+    var timestamp = rawCommentEntry['created_on'];
+    var externalID =  'comment' + '-' + rawCommentEntry['comment_id'];
+    var parentData = parent['data'];
+    var parentExternalID =  'task' + '-' + rawCommentEntry.ref.id;
+    var jiveID = undefined;
+    var type = 'comment';
+
+    var comment = {
+        'type' : 'comment',
+        'description' : description,
+        'actor' : actor,
+        'object' : object,
+        'externalID' : externalID,
+        'parentExternalID' : parentExternalID,
+        'timestamp' : timestamp,
+        'jiveID' : jiveID
+    };
+
+
+//    console.log(JSON.stringify(activity, null, 4));
+
+    return comment;
+}
 
 function getAllActivity(extstreamInstance, converter, activityType) {
     return getLastTimePulled(extstreamInstance, activityType).then(function (lastTimePulled) {
 
         var date = new Date(lastTimePulled);
+        //console.log("getAllActivity: activity=", activityType, " lastTimePulled=", date.getTime(), " ", date.toISOString())
         var query = "/stream/";
 
         var config = extstreamInstance['config'];
@@ -99,11 +158,27 @@ function getAllActivity(extstreamInstance, converter, activityType) {
 
             var activityEntries = [];
             var addIt = function (extractedActivity) {
-                console.log( "activity: type=" + extractedActivity.type + " d:'" + extractedActivity.description +
-                "' t: '" + extractedActivity.title + "'" + " " + new Date(extractedActivity['timestamp']).getTime() + " " + date.getTime()) ;
+                var elapsedTime =  (new Date(extractedActivity['timestamp']).getTime() - date.getTime());
+                if (extractedActivity.type == 'comment')
+                {
+                //console.log( "activity: type=" + extractedActivity.type + " d:'" + extractedActivity.description +
+                //"' eID:" + extractedActivity.externalID + " jID:" + extractedActivity.jiveIDi +
+                 //   " pID:" + extractedActivity.parentExternalID + " t:'" + extractedActivity.object.title + " ' " + elapsedTime) ;
+                //if (!elapsedTime)
+                //    console.log( "elapsed = 0? ts=", new Date(extractedActivity['timestamp']).getTime(), " ct=",date.getTime());
+                }
                 if (extractedActivity && new Date(extractedActivity['timestamp']).getTime() > date.getTime()) {
-                    console.log( "activity: post it!") ;
-                    activityEntries.push(extractedActivity);
+                    // do we match what we are looking for?
+                    if (activityType == 'comment' && extractedActivity.type == 'comment')
+                    {
+                        //console.log( activityType, " post comment! '" + extractedActivity.description) + "'" ;
+                        activityEntries.push(extractedActivity);
+                    }
+                    else if (activityType == 'activity' && extractedActivity.type != 'comment')
+                    {
+                        //console.log( activityType, " post activity!") ;
+                        activityEntries.push(extractedActivity);
+                    }
                 }
             };
 
@@ -123,6 +198,8 @@ function getAllActivity(extstreamInstance, converter, activityType) {
                         });
                     }
                 });
+
+                return converter(activityEntries, lastTimePulled, extstreamInstance);
             }
             else
             {
@@ -131,21 +208,122 @@ function getAllActivity(extstreamInstance, converter, activityType) {
 
                 if (!objectActivity || objectActivity.length < 1) {
                     addIt(extractActivity(activities, activities));
+                    return converter(activityEntries, lastTimePulled, extstreamInstance);
                 } else {
                     // its the first time
+                    var taskCount=-1;
+                    var deferred = q.defer();
                     objectActivity.forEach(function (rawActivityEntry) {
                         addIt(extractActivity(activities, rawActivityEntry));
+                        // testing out for dealing with processing each individual task to extract comments ...
+                        if (activityType == "comment" && rawActivityEntry.type == "task")
+                        {
+                            //console.log( "process task id=" + rawActivityEntry.id)    ;
+                            taskCount++;
+                            var taskQuery = "task/" + rawActivityEntry.id;
+                            querier.doGet(taskQuery, extstreamInstance).then(function (response) {
+                                var task = response.entity ;
+                                //console.log( "good task query for task=" + task.task_id + " number of comments="+task.comments.length);
+                                task.comments.forEach(function(comment) {
+                                    //console.log( extractComment(comment, comment)) ;
+                                    //console.log( "add comment .... task count=" + taskCount)
+                                    addIt(extractComment(comment,comment))  ;
+
+                                });
+                                if (--taskCount == 0)
+                                {
+                                    //console.log( "return " + activityEntries.length + " item(s) at pt 1");
+                                    deferred.resolve(converter(activityEntries, lastTimePulled, extstreamInstance));
+                                }
+                            },
+                            function(error)
+                            {
+                                console.log("bad task query");
+                            } );
+                        }
+                         // end of testing out for dealing with ....
+
                     });
+                    if (taskCount < 0)
+                    {
+                        // this is the case where we didn't process any tasks ...
+                        //console.log( "return " + activityEntries.length + " item(s) at pt 2")
+                        return converter(activityEntries, lastTimePulled, extstreamInstance);
+                    }
+                    else return deferred.promise;
                 }
+                //return converter(activityEntries, lastTimePulled, extstreamInstance);
             }
 
-            return converter(activityEntries, lastTimePulled, extstreamInstance);
+            // this was commented out for the testing of getting comments on tasks ...
+            //return converter(activityEntries, lastTimePulled, extstreamInstance);
         });
     }).catch(function (err) {
             jive.logger.error('Error querying Podio', err);
     });
 }
 
+// this function is meant to just get the info for the specific project we are monitoring and push it
+// once in a lifetime to Jive so that any comments that come in later has an object to attach to
+// it isn't clear that Podio sends us an activity record for project creation, thus making this step required
+
+function getProjectInfo(extstreamInstance, activityType) {
+    var activityID = activityType;
+    var projectID = extstreamInstance['config']['projectID'] ;
+    if (Number(projectID))
+        activityID += ("-" + projectID);
+
+    return getLastTimePulled(extstreamInstance, activityID).then(function (lastTimePulled) {
+
+        var date = new Date(lastTimePulled);
+        var query;
+        var config = extstreamInstance['config'];
+        if (config && config['projectID'] != undefined)
+        {
+            var projectID = extstreamInstance['config']['projectID'] ;
+            if (Number(projectID))
+            {
+                // we have a project ID now .. make the query more specific ...
+                query = "/item/" + projectID;
+            }
+        }
+        else
+            return ;  // if not project centric, don't need to post specific project info ...
+
+        return querier.doGet(query, extstreamInstance).then(function (response) {
+            var record = response['entity'];
+            var createdDate = new Date(record['created_on']).getTime();
+            if (createdDate <= lastTimePulled)    return;   // we've already pushed this item, don't do it again
+            var actor = {
+                'name' : record['created_by']['name'],
+                'email' : ''
+            };
+
+            var projectInfo = {
+                "podioCreatedDate" : createdDate,
+                    "activity" : {
+                    "action":{
+                        "name":"posted",
+                            "description": "New Activity"
+                    },
+                    "actor":actor,
+                        "object":{
+                        "type":"website",
+                            "image" : "http://www.theappchamp.com/wp-content/uploads/2013/05/podioApp1.jpg",
+                            "url": record.link,
+                            "title": record.fields[0].values[0].value,
+                            "description":record.fields[3].values[0].value
+                    },
+                    "externalID" : "item-" + record.item_id
+                    }
+                } ;
+            lastTimePulled = Math.max(lastTimePulled, projectInfo['podioCreatedDate'] );
+            return updateLastTimePulled(extstreamInstance, lastTimePulled, activityID).thenResolve(projectInfo);
+        });
+    }).catch(function (err) {
+            jive.logger.error('Error querying Podio', err);
+        });
+}
 function pullActivity(extstreamInstance, converter) {
     return getAllActivity(extstreamInstance, convertToActivities, 'activity');
 }
@@ -154,6 +332,9 @@ function pullComments(extstreamInstance) {
     return getAllActivity(extstreamInstance, convertToComments, 'comment');
 }
 
+function pullProjectInfo(extstreamInstance) {
+    return getProjectInfo(extstreamInstance, 'project');
+}
 function convertToActivities(entity, lastTimePulled, instance) {
     var records = entity;
 
@@ -197,6 +378,16 @@ function convertToComments(entity, lastTimePulled, instance) {
         {
             var podioCommentID = record['externalID'];
             record['projectName']  = instance.config['project'];
+            var nIdx1 = record['externalID'].lastIndexOf("-");
+
+            if (nIdx1 > 0)
+            {
+                podioCommentID = record['externalID'].substring(nIdx1+1);
+                // make sure we have a number and not a string to allow the sync compare to work ...
+                podioCommentID = Number(podioCommentID);
+            }
+            console.log( "podioCommentID type=" + typeof(podioCommentID)) ;
+
             promise = promise.thenResolve(
                 wasSynced(instance, podioCommentID).then(function (wasItSynced) {
                     if (wasItSynced) {
@@ -283,7 +474,7 @@ function getLastTimePulled(instance, type) {
 
         if (!lastTimePulled) {
 
-             // set to something way before we were born!
+             // set to something way before we (this application) were born!
             lastTimePulled = new Date("2013-08-05T16:26:53.664Z").getTime();
             return updateLastTimePulled(instance, lastTimePulled, type).thenResolve(lastTimePulled);
         }

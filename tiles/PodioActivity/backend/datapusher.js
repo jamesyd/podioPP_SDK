@@ -33,31 +33,51 @@ exports.task = new jive.tasks.build(
     //        lastTime = now.getTime();
 
             if ( instances ) {
-            //if (0)  {
                 instances.forEach( function( instance ) {
 
                     var config = instance['config'];
                     if ( config && config['posting'] === 'off' ) {
                         return;
                     }
+                    // first off, get the Project Info - this is meant to make sure that we have a high
+                    // level item describing the project we are monitoring exists in the activity stream
+                    // this is to make sure that subsequent comments on the project can be posted.
+                    // If we aren't project centric of if we have already posted the project Info, then
+                    // this call will return 'undefinded' and we'll just carry on ...
+                    activities.pullProjectInfo( instance).then( function(projectInfo)   {
+                        console.log( "got project info: ", projectInfo );
+                        if (projectInfo != undefined)  {
+                            var promise = q.resolve(1);
 
-                    activities.pullActivity(instance).then( function(data) {
-                        var promise = q.resolve(1);
-                        data.forEach(function (activity) {
-                            delete activity['podioCreatedDate'];
-                            console.log( "PodioActivity push: ", JSON.stringify(activity));
-                            promise = promise.thenResolve(jive.extstreams.pushActivity(instance, activity));
+                            delete projectInfo['podioCreatedDate'];
+                            console.log( "PodioActivity push project info: ", JSON.stringify(projectInfo));
+                            promise = promise.thenResolve(jive.extstreams.pushActivity(instance, projectInfo));
+
+                            promise = promise.catch(function(err) {
+                                jive.logger.error('Error pushing project info to Jive', err);
+                            });
+
+                            return promise;
+                        }
+                    } ).then( function() {
+                        activities.pullActivity(instance).then( function(data) {
+                            console.log("got " + data.length + "  activity record(s) from Podio") ;
+                            var promise = q.resolve(1);
+                            data.forEach(function (activity) {
+                                delete activity['podioCreatedDate'];
+                                console.log( "PodioActivity push: ", JSON.stringify(activity));
+                                promise = promise.thenResolve(jive.extstreams.pushActivity(instance, activity));
+                            });
+
+                            promise = promise.catch(function(err) {
+                                jive.logger.error('Error pushing activity to Jive', err);
+                            });
+
+                            return promise;
                         });
-
-                        promise = promise.catch(function(err) {
-                            jive.logger.error('Error pushing activity to Jive', err);
-                        });
-
-                        return promise;
                     }).then( function() {
-
                         activities.pullComments(instance).then( function(comments) {
-                            //console.log("got " + comments.length + " comment activity record(s) from Podio") ;
+                            console.log("got " + comments.length + " comment activity record(s) from Podio") ;
                             var promise = q.resolve(1);
                             comments.forEach(function (comment) {
                                 delete comment['podioCreatedDate'];

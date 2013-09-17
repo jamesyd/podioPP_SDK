@@ -66,9 +66,9 @@ function pushCommentsToPodio(jiveComment, extstream) {
     var publishedTime = new Date(jiveComment.published).getTime();
 
     return querier.doPost(query, bodyPayload, extstream).then(function (response) {
-        console.log('Pushed comment to Basecamp');
+        console.log('Pushed comment to Podio');
         return activities.updateLastTimePulled(extstream, publishedTime, "jivecomment").then(function () {
-            var id = response && response.entity && response.entity.id;
+            var id = response && response.entity && response.entity.comment_id;
             if (id) {
                 return activities.recordSyncFromJive(extstream, id);
             }
