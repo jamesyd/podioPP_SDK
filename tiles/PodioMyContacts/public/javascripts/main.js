@@ -25,8 +25,23 @@ function doIt( host ) {
 
     var oauth2SuccessCallback = function(ticketID) {
         // do configuration
-        $("#j-card-authentication").hide();
-        $("#j-card-configuration").show();
+        if (ticketID == undefined)
+        {
+            // authorization failed ...
+            // not authenticated .... need to show a different screen and bail ...
+            $("#j-card-authentication").hide();
+            $("#j-card-authentication-failed").show();
+            gadgets.window.adjustHeight();
+
+            $("#btn_exit").click( function() {
+                jive.tile.close();
+            });
+        }
+        else
+        {
+            $("#j-card-authentication").hide();
+            $("#j-card-configuration").show();
+        }
 
         $("#btn_done").click( function() {
             var toReturn = {

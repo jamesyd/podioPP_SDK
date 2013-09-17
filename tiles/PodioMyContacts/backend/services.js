@@ -89,8 +89,7 @@ function processTileInstance(instance) {
 
 exports.task = new jive.tasks.build(
     // runnable
-    function() {
-        jive.tiles.findByDefinitionName( 'podio' ).then( function(instances) {
+    function() {        jive.tiles.findByDefinitionName( 'PodioMyContacts' ).then( function(instances) {
             if ( instances ) {
                 instances.forEach( function( instance ) {
                     processTileInstance(instance);
